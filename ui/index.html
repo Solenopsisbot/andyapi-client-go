@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AndyAPI Local Client</title>
+  <style>
+    :root{
+      --bg:#0f1115;--panel:#141922;--muted:#94a3b8;--text:#e2e8f0;--primary:#3b82f6;--border:#233044;--accent:#22c55e;--warn:#f59e0b;--danger:#ef4444
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(180deg,#0b0e13,#0f1115 120px) fixed;color:var(--text)}
+    header{position:sticky;top:0;z-index:10;background:#121722cc;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border)}
+    .title{font-weight:700}
+  .pill{padding:2px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);}
+  .badge.gray{background:#374151;color:#e5e7eb}
+  .badge.green{background:#065f46;color:#a7f3d0}
+  .badge.red{background:#7f1d1d;color:#fecaca}
+    .btn{background:#1b2230;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--primary);border-color:var(--primary)}
+    .btn.danger{background:#b91c1c;border-color:#b91c1c}
+    main{max-width:1120px;margin:0 auto;padding:20px}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border)}
+    .tab{padding:10px 12px;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;background:#121722;color:var(--muted);cursor:pointer}
+    .tab.active{color:var(--text);background:#161c26}
+    .panel{border:1px solid var(--border);border-radius:0 8px 8px 8px;background:#121722;padding:16px;margin-bottom:18px}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+    label{font-size:12px;color:var(--muted)}
+    input,select{width:100%;margin-top:6px;padding:10px;background:#0f141d;border:1px solid var(--border);border-radius:8px;color:var(--text)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+    th{font-size:12px;color:var(--muted);text-transform:uppercase}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+    .toast{position:fixed;bottom:16px;right:16px;background:#1b2230;border:1px solid var(--border);padding:10px 12px;border-radius:8px;display:none}
+    .hint{color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <div class="title">AndyAPI Local Client</div>
+      <div id="statusBadge" class="badge gray">never connected</div>
+      <div id="clientId" class="pill">id: …</div>
+      <div id="wsUrl" class="pill">ws: …</div>
+    </div>
+    <div class="row">
+      <button id="btnConnect" class="btn primary">Connect to AndyAPI</button>
+      <button id="btnDisconnect" class="btn" style="display:none">Disconnect from AndyAPI</button>
+      <button id="btnSave" class="btn primary">Save</button>
+    </div>
+  </header>
+  <main>
+    <div class="tabs">
+      <div class="tab active" data-tab="connection">Connection</div>
+      <div class="tab" data-tab="models">Models</div>
+      <div class="tab" data-tab="about">About</div>
+    </div>
+
+    <section id="tab-connection" class="panel">
+      <h3>Connection</h3>
+      <div class="grid">
+        <div>
+          <label>Andy API Base URL</label>
+          <input id="andy_api_url" placeholder="https://andy.mindcraft-ce.com/api/">
+          <div class="hint">WS derived as ws(s)://host/ws</div>
+        </div>
+        <div>
+          <label>Provider Name</label>
+          <input id="provider" placeholder="my-provider">
+          <div class="hint">Optional, if you want to provide the provider DEFAULT: local-llm</div>
+        </div>
+        <div>
+          <label>Heartbeat Interval (sec)</label>
+          <input id="heartbeat" type="number" min="5" value="30">
+        </div>
+        <div>
+          <label>Reconnect Max Backoff (sec)</label>
+          <input id="reconnect" type="number" min="5" value="30">
+        </div>
+        <div>
+          <label>Local OpenAI API URL</label>
+          <input id="local_api_url" placeholder="http://localhost:11434">
+          <div class="hint">Used to scan /v1/models from a local provider <b>(WITHOUT /v1)</b></div>
+        </div>
+        <div>
+          <label>Local OpenAI API Key</label>
+          <input id="local_api_key" placeholder="sk-...">
+          <div class="hint">Optional, only if your local API requires it</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-models" class="panel" style="display:none">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Models</h3>
+        <div class="row">
+          <button id="btnScanModels" class="btn">Scan from Local API</button>
+        </div>
+      </div>
+      <div id="modelsEmpty" class="hint" style="margin:8px 0">No models yet. Click &quot;Scan from Local API&quot; to populate from /v1/models.</div>
+      <table id="modelsTable" style="display:none;margin-top:8px">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Context</th>
+            <th>Concurrency</th>
+            <th>Embed</th>
+            <th>Vision</th>
+            <th>Enabled</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="modelsBody"></tbody>
+      </table>
+
+      <div id="modelEditor" class="panel" style="margin-top:14px;display:none">
+        <h4 id="editorTitle">New Model</h4>
+        <div class="grid">
+          <div>
+            <label>Name</label>
+            <input id="m_name" placeholder="model-id">
+          </div>
+          <div>
+            <label>Max Completion Tokens</label>
+            <input id="m_ctx" type="number" min="1" value="4096">
+          </div>
+          <div>
+            <label>Concurrent Connections</label>
+            <input id="m_cc" type="number" min="1" value="1">
+          </div>
+          <div>
+            <label><input id="m_embed" type="checkbox"> Supports Embedding</label>
+          </div>
+          <div>
+            <label><input id="m_vision" type="checkbox"> Supports Vision</label>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="btnSaveModel" class="btn primary">Save Model</button>
+          <button id="btnCancelModel" class="btn">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-about" class="panel" style="display:none">
+      <h3>About</h3>
+      <p class="hint">This client connects your local/provider models to the Andy API server via WebSocket and exposes a small UI to manage configuration.</p>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script>
+    const $ = s => document.querySelector(s);
+    const show = el => el.style.display = '';
+    const hide = el => el.style.display = 'none';
+    const toast = (m) => { const t=$('#toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 2200)};
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      ['connection','models','about'].forEach(name => hide($('#tab-'+name)));
+      show($('#tab-'+t.dataset.tab));
+    }));
+
+    // State
+    let cfg = null; let initial = false; let editIndex = -1;
+
+    function wsFrom(base){ if(!base) return ''; base = base.trim().replace(/\/$/,'');
+      if(base.startsWith('ws')) return base.endsWith('/ws')?base:base+'/ws';
+      if(base.startsWith('http://')) return 'ws://'+base.slice(7)+'/ws';
+      if(base.startsWith('https://')) return 'wss://'+base.slice(8)+'/ws';
+      return 'ws://'+base+'/ws'; }
+
+    async function loadState(){ try{ const r = await fetch('/api/state'); if(r.ok){ const j = await r.json(); initial = j.initial_setup; } }catch(e){} }
+    async function loadCfg(){ const r = await fetch('/config'); cfg = await r.json(); renderAll(); }
+
+    function renderAll(){
+      // Connection
+      $('#andy_api_url').value = cfg.andy_api_url||'';
+      $('#provider').value = cfg.provider||'';
+      $('#heartbeat').value = cfg.heartbeat_interval||30;
+      $('#reconnect').value = cfg.reconnect_max_backoff||30;
+  $('#wsUrl').textContent = 'ws: '+ (cfg.andy_api_url? wsFrom(cfg.andy_api_url): 'ws://localhost:8080/ws');
+  // Local API fields
+  const lurl = (cfg.local_api_url||'');
+  const lkey = (cfg.local_api_key||'');
+  const elUrl = document.getElementById('local_api_url'); if(elUrl) elUrl.value = lurl;
+  const elKey = document.getElementById('local_api_key'); if(elKey) elKey.value = lkey;
+
+      // Models
+      const models = cfg.models||[];
+      const empty = $('#modelsEmpty'); const table = $('#modelsTable'); const body = $('#modelsBody');
+      body.innerHTML = '';
+      if(models.length === 0){ show(empty); hide(table);} else { hide(empty); show(table); }
+      models.forEach((m,i)=>{
+        const tr = document.createElement('tr');
+        const enabled = m.enabled? 'checked' : '';
+        tr.innerHTML = `<td>${m.name||''}</td><td>${m.max_completion_tokens||0}</td><td>${m.concurrent_connections||1}</td>
+                        <td>${m.supports_embedding?'✔':''}</td><td>${m.supports_vision?'✔':''}</td>
+                        <td><input type="checkbox" data-enable="${i}" ${enabled}></td>
+                        <td><button class="btn" data-i="${i}">Edit</button> <button class="btn danger" data-del="${i}">Delete</button></td>`;
+        body.appendChild(tr);
+      });
+      // Client ID on header (best-effort from /health)
+      fetch('/health').then(r=>r.json()).then(h=>{ $('#clientId').textContent = 'id: '+(h.client_id||'…'); });
+    }
+
+    // Table actions
+    document.addEventListener('click', (e)=>{
+      const i = e.target.getAttribute('data-i');
+      if(i!==null){ editIndex = parseInt(i); openEditor(cfg.models[editIndex]); }
+      const del = e.target.getAttribute('data-del');
+      if(del!==null){ const idx = parseInt(del); cfg.models.splice(idx,1); renderAll(); }
+    });
+    document.addEventListener('change', (e)=>{
+      const idx = e.target.getAttribute('data-enable');
+      if(idx!==null){ const i = parseInt(idx); cfg.models[i].enabled = !!e.target.checked; }
+    });
+
+    function openEditor(m){ $('#editorTitle').textContent = (editIndex===-1? 'New' : 'Edit') + ' Model';
+      $('#m_name').value = m?.name||'';
+      $('#m_ctx').value = m?.max_completion_tokens||4096;
+      $('#m_cc').value = m?.concurrent_connections||1;
+      $('#m_embed').checked = !!m?.supports_embedding;
+      $('#m_vision').checked = !!m?.supports_vision;
+      show($('#modelEditor')); }
+
+  // Adding is guided by scan; you can still edit scanned models below.
+    $('#btnCancelModel').onclick = ()=>{ hide($('#modelEditor')); };
+    $('#btnSaveModel').onclick = ()=>{
+      const m = {
+        name: $('#m_name').value.trim(),
+        max_completion_tokens: parseInt($('#m_ctx').value||'0'),
+        concurrent_connections: parseInt($('#m_cc').value||'1'),
+        supports_embedding: $('#m_embed').checked,
+        supports_vision: $('#m_vision').checked,
+        enabled: (editIndex===-1 ? false : !!cfg.models[editIndex]?.enabled),
+      };
+      if(!m.name){ toast('Model name required'); return; }
+      if(editIndex===-1){ cfg.models = cfg.models||[]; cfg.models.push(m); } else { cfg.models[editIndex]=m; }
+      hide($('#modelEditor')); renderAll();
+    };
+
+    // Save (initial vs update)
+  $('#btnSave').onclick = async ()=>{
+      try{
+        const payload = {
+          andy_api_url: $('#andy_api_url').value.trim(),
+          provider: $('#provider').value.trim()||'provider',
+          heartbeat_interval: parseInt($('#heartbeat').value||'30'),
+          reconnect_max_backoff: parseInt($('#reconnect').value||'30'),
+          local_api_url: (document.getElementById('local_api_url')?.value||'').trim(),
+          local_api_key: (document.getElementById('local_api_key')?.value||'').trim(),
+          models: cfg.models||[],
+        };
+  const url = initial? '/api/save-config' : '/api/update-config';
+  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  if(!res.ok) throw new Error(await res.text());
+  initial = false;
+        cfg = payload; // update local
+        toast('Saved');
+      }catch(e){ toast('Save failed'); }
+    };
+
+    // Connection controls
+    async function refreshStatus(){
+      try{
+        const r = await fetch('/api/status');
+        if(!r.ok) return;
+        const s = await r.json();
+        const badge = document.getElementById('statusBadge');
+        const idEl = document.getElementById('clientId');
+        $('#wsUrl').textContent = 'ws: '+(s.ws_url||'…');
+        const ever = !!s.ever_connected;
+        const conn = !!s.connected;
+        let cls = 'gray', text='never connected';
+        if(ever && conn){ cls='green'; text='connected'; }
+        else if(ever && !conn){ cls='red'; text='disconnected'; }
+        badge.className = 'badge '+cls; badge.textContent = text;
+        idEl.textContent = 'id: '+(s.client_id||'…');
+        // toggle buttons
+        document.getElementById('btnConnect').style.display = conn? 'none' : '';
+        document.getElementById('btnDisconnect').style.display = conn? '' : 'none';
+      }catch(e){}
+    }
+    document.getElementById('btnConnect').onclick = async ()=>{ await fetch('/api/connect', {method:'POST'}); setTimeout(refreshStatus, 200); };
+    document.getElementById('btnDisconnect').onclick = async ()=>{ await fetch('/api/disconnect', {method:'POST'}); setTimeout(refreshStatus, 200); };
+    setInterval(refreshStatus, 1500);
+
+    // Scan models from local OpenAI-compatible API via server proxy (avoids CORS)
+    const scanBtn = document.getElementById('btnScanModels');
+    if (scanBtn) scanBtn.addEventListener('click', async ()=>{
+      const base = (document.getElementById('local_api_url')?.value||'').trim();
+      const key  = (document.getElementById('local_api_key')?.value||'').trim();
+      if(!base){ toast('Local API URL required'); return; }
+      try{
+        const res = await fetch('/api/scan-models', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({base_url: base, api_key: key})});
+        if(!res.ok){ throw new Error(await res.text()); }
+        const data = await res.json();
+        cfg.models = data.models||[];
+        renderAll();
+        toast('Scanned '+cfg.models.length+' models');
+      }catch(e){ toast('Scan failed'); }
+    });
+
+    // Init
+  loadState().then(loadCfg).then(refreshStatus);
+  </script>
+</body>
+</html>
