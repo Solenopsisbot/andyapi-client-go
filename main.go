@@ -392,7 +392,7 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, e
 	for strings.HasSuffix(base, "/") {
 		base = strings.TrimSuffix(base, "/")
 	}
-	url := base + "/v1/chat/completions"
+	url := base + "/chat/completions"
 
 	messages := []map[string]string{}
 	if modelCfg != nil && modelCfg.SystemPrompt != "" {
@@ -623,7 +623,7 @@ func (pc *ProviderClient) startHTTP(addr string) {
 		}
 		// normalize URL
 		for strings.HasSuffix(base, "/") { base = strings.TrimSuffix(base, "/") }
-		url := base + "/v1/models"
+		url := base + "/models"
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
