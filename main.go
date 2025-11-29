@@ -30,6 +30,8 @@ type LocalEndpoint struct {
 	APIKey       string            `yaml:"api_key" json:"api_key"`
 	ExtraHeaders map[string]string `yaml:"extra_headers" json:"extra_headers"`
 	ExtraParams  map[string]interface{} `yaml:"extra_params" json:"extra_params"`
+	EnableLogging bool             `yaml:"enable_logging" json:"enable_logging"`
+	LogFile       string           `yaml:"log_file" json:"log_file"`
 }
 
 type ModelConfig struct {
@@ -45,6 +47,8 @@ type ModelConfig struct {
 	Enabled               bool              `yaml:"enabled" json:"enabled"`
 	ExtraHeaders          map[string]string `yaml:"extra_headers" json:"extra_headers"`
 	ExtraParams           map[string]interface{} `yaml:"extra_params" json:"extra_params"`
+	EnableLogging         *bool             `yaml:"enable_logging" json:"enable_logging"`         // nil = inherit from endpoint
+	LogFile               string            `yaml:"log_file" json:"log_file"`                     // empty = inherit from endpoint
 }
 
 type Config struct {
@@ -325,6 +329,62 @@ func (s *Statistics) GetStats() map[string]interface{} {
 	}
 }
 
+// ---------- Request/Response Logging ----------
+
+type RequestLog struct {
+	Timestamp      time.Time              `json:"timestamp"`
+	RequestID      string                 `json:"request_id"`
+	Model          string                 `json:"model"`
+	InternalModel  string                 `json:"internal_model,omitempty"`
+	EndpointID     string                 `json:"endpoint_id,omitempty"`
+	Prompt         string                 `json:"prompt"`
+	SystemPrompt   string                 `json:"system_prompt,omitempty"`
+	ImageIncluded  bool                   `json:"image_included"`
+	MaxTokens      int                    `json:"max_tokens,omitempty"`
+	Response       string                 `json:"response"`
+	TokensIn       int                    `json:"tokens_in"`
+	TokensOut      int                    `json:"tokens_out"`
+	DurationMs     int64                  `json:"duration_ms"`
+	Success        bool                   `json:"success"`
+	ErrorMessage   string                 `json:"error_message,omitempty"`
+	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`
+}
+
+var logFileMu sync.Mutex
+
+func writeRequestLog(logFile string, entry RequestLog) error {
+	if logFile == "" {
+		return nil
+	}
+	logFileMu.Lock()
+	defer logFileMu.Unlock()
+
+	// Ensure directory exists
+	dir := filepath.Dir(logFile)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create log directory: %w", err)
+		}
+	}
+
+	// Open file in append mode, create if not exists
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	defer f.Close()
+
+	// Write as JSONL (one JSON object per line)
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("failed to marshal log entry: %w", err)
+	}
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return fmt.Errorf("failed to write log entry: %w", err)
+	}
+	return nil
+}
+
 // ---------- Runtime Client State ----------
 
 type ProviderClient struct {
@@ -540,8 +600,8 @@ func (pc *ProviderClient) handleRequest(msg WSMessage) {
 	b, _ := json.Marshal(msg.Data)
 	_ = json.Unmarshal(b, &req)
 	// Forward to local OpenAI-compatible API using the requested model
-	respText, tokensOut, err := pc.callLocalCompletion(req)
-	duration := time.Since(startTime).Seconds()
+	result := pc.callLocalCompletion(req)
+	duration := time.Since(startTime)
 	
 	// Estimate input tokens (rough: ~4 chars per token)
 	tokensIn := len(req.Prompt) / 4
@@ -549,31 +609,76 @@ func (pc *ProviderClient) handleRequest(msg WSMessage) {
 		tokensIn = 1
 	}
 
-	if err != nil {
-		log.Printf("local completion error: %v", err)
-		pc.stats.RecordRequest(req.Model, duration, tokensIn, 0, false, err.Error())
+	// Handle logging if enabled
+	if result.EnableLogging && result.LogFile != "" {
+		logEntry := RequestLog{
+			Timestamp:     startTime,
+			RequestID:     msg.RequestID,
+			Model:         req.Model,
+			InternalModel: result.InternalModel,
+			EndpointID:    result.EndpointID,
+			Prompt:        req.Prompt,
+			SystemPrompt:  result.SystemPrompt,
+			ImageIncluded: req.ImageBase64 != "",
+			MaxTokens:     req.MaxCompletionTokens,
+			Response:      result.Response,
+			TokensIn:      tokensIn,
+			TokensOut:     result.TokensOut,
+			DurationMs:    duration.Milliseconds(),
+			Success:       result.Error == nil,
+			ExtraParams:   result.ExtraParams,
+		}
+		if result.Error != nil {
+			logEntry.ErrorMessage = result.Error.Error()
+		}
+		if err := writeRequestLog(result.LogFile, logEntry); err != nil {
+			log.Printf("Failed to write request log: %v", err)
+		}
+	}
+
+	if result.Error != nil {
+		log.Printf("local completion error: %v", result.Error)
+		pc.stats.RecordRequest(req.Model, duration.Seconds(), tokensIn, 0, false, result.Error.Error())
 		resp := LocalClientResponse{ID: req.ID, Response: "", Status: "error", Error: 1}
 		pc.writeJSON(WSMessage{Type: "response", RequestID: msg.RequestID, ClientID: pc.clientID, Data: resp, Timestamp: time.Now()})
 		return
 	}
 	
-	pc.stats.RecordRequest(req.Model, duration, tokensIn, tokensOut, true, "")
-	resp := LocalClientResponse{ID: req.ID, Response: respText, Status: "ok", Error: 0}
+	pc.stats.RecordRequest(req.Model, duration.Seconds(), tokensIn, result.TokensOut, true, "")
+	resp := LocalClientResponse{ID: req.ID, Response: result.Response, Status: "ok", Error: 0}
 	pc.writeJSON(WSMessage{Type: "response", RequestID: msg.RequestID, ClientID: pc.clientID, Data: resp, Timestamp: time.Now()})
 }
 
+// CompletionResult holds the result of a local completion call including metadata for logging
+type CompletionResult struct {
+	Response      string
+	TokensOut     int
+	Error         error
+	// Metadata for logging
+	InternalModel string
+	EndpointID    string
+	SystemPrompt  string
+	ExtraParams   map[string]interface{}
+	EnableLogging bool
+	LogFile       string
+}
+
 // callLocalCompletion sends a chat completion request to the configured local OpenAI-compatible API.
-// Returns (response text, output tokens estimate, error)
-func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, int, error) {
+// Returns CompletionResult with response text, output tokens estimate, error, and logging metadata
+func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) CompletionResult {
 	pc.mu.RLock()
 	cfg := pc.cfg
 	pc.mu.RUnlock()
+
+	result := CompletionResult{}
 
 	var endpointURL, endpointKey, modelID string
 	var endpointHeaders map[string]string
 	var endpointParams map[string]interface{}
 	var modelHeaders map[string]string
 	var modelParams map[string]interface{}
+	var endpointEnableLogging bool
+	var endpointLogFile string
 
 	// Find model config
 	var modelCfg *ModelConfig
@@ -595,6 +700,9 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 					endpointKey = endpoint.APIKey
 					endpointHeaders = endpoint.ExtraHeaders
 					endpointParams = endpoint.ExtraParams
+					endpointEnableLogging = endpoint.EnableLogging
+					endpointLogFile = endpoint.LogFile
+					result.EndpointID = endpoint.ID
 					break
 				}
 			}
@@ -607,9 +715,12 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 		}
 		modelHeaders = modelCfg.ExtraHeaders
 		modelParams = modelCfg.ExtraParams
+		result.SystemPrompt = modelCfg.SystemPrompt
 	} else {
 		modelID = req.Model
 	}
+
+	result.InternalModel = modelID
 
 	// Fallback to legacy/default if no endpoint found
 	if endpointURL == "" {
@@ -624,13 +735,32 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 		endpointKey = endpoint.APIKey
 		endpointHeaders = endpoint.ExtraHeaders
 		endpointParams = endpoint.ExtraParams
+		endpointEnableLogging = endpoint.EnableLogging
+		endpointLogFile = endpoint.LogFile
+		result.EndpointID = endpoint.ID
+	}
+
+	// Determine logging settings (model overrides endpoint)
+	if modelCfg != nil && modelCfg.EnableLogging != nil {
+		result.EnableLogging = *modelCfg.EnableLogging
+	} else {
+		result.EnableLogging = endpointEnableLogging
+	}
+	if modelCfg != nil && modelCfg.LogFile != "" {
+		result.LogFile = modelCfg.LogFile
+	} else if endpointLogFile != "" {
+		result.LogFile = endpointLogFile
+	} else if result.EnableLogging {
+		// Default log file if logging enabled but no file specified
+		result.LogFile = "logs/requests.jsonl"
 	}
 
 	base := strings.TrimSpace(endpointURL)
 	key := strings.TrimSpace(endpointKey)
 
 	if base == "" {
-		return "", 0, fmt.Errorf("no endpoint configured for model %s", req.Model)
+		result.Error = fmt.Errorf("no endpoint configured for model %s", req.Model)
+		return result
 	}
 	for strings.HasSuffix(base, "/") {
 		base = strings.TrimSuffix(base, "/")
@@ -662,6 +792,18 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 		payload[k] = v
 	}
 
+	// Collect merged extra params for logging (excluding messages and model)
+	mergedParams := make(map[string]interface{})
+	for k, v := range endpointParams {
+		mergedParams[k] = v
+	}
+	for k, v := range modelParams {
+		mergedParams[k] = v
+	}
+	if len(mergedParams) > 0 {
+		result.ExtraParams = mergedParams
+	}
+
 	body, _ := json.Marshal(payload)
 	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -685,7 +827,8 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", 0, err
+		result.Error = err
+		return result
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -693,7 +836,8 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 			Error interface{} `json:"error"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&slurp)
-		return "", 0, fmt.Errorf("local api status %s: %v", resp.Status, slurp.Error)
+		result.Error = fmt.Errorf("local api status %s: %v", resp.Status, slurp.Error)
+		return result
 	}
 	var out struct {
 		Choices []struct {
@@ -706,10 +850,12 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", 0, err
+		result.Error = err
+		return result
 	}
 	if len(out.Choices) == 0 {
-		return "", 0, fmt.Errorf("no choices")
+		result.Error = fmt.Errorf("no choices")
+		return result
 	}
 	
 	content := out.Choices[0].Message.Content
@@ -721,7 +867,9 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 			tokensOut = 1
 		}
 	}
-	return content, tokensOut, nil
+	result.Response = content
+	result.TokensOut = tokensOut
+	return result
 }
 
 func (pc *ProviderClient) writeJSON(v interface{}) {
