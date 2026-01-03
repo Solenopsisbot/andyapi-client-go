@@ -380,7 +380,7 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, e
 	}
 	// ensure max_tokens included only if > 0
 	if req.MaxCompletionTokens > 0 {
-		payload["max_tokens"] = req.MaxCompletionTokens
+		payload["max_completion_tokens"] = req.MaxCompletionTokens
 	}
 	body, _ := json.Marshal(payload)
 	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
