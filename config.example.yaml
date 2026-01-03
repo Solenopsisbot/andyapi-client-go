@@ -11,17 +11,77 @@ heartbeat_interval: 30
 # Reconnect backoff seconds (max)
 reconnect_max_backoff: 30
 
+# Global default request timeout in seconds (default: 120)
+default_timeout: 120
+
+# Hot reload config changes when config.yaml is modified (default: true)
+hot_reload: true
+
+# Multiple OpenAI-compatible API endpoints
+# Each endpoint can have its own URL, API key, headers, and parameters
+endpoints:
+  - id: "local-ollama"
+    name: "Local Ollama"
+    base_url: "http://localhost:11434"
+    api_key: ""
+    timeout: 120  # Optional per-endpoint timeout
+    enabled: true
+    priority: 1   # Lower = higher priority for fallback
+    headers: {}   # Extra headers to send with requests
+    extra_params: {}  # Extra parameters to include in requests
+    
+  - id: "openrouter"
+    name: "OpenRouter"
+    base_url: "https://openrouter.ai/api"
+    api_key: "sk-or-..."  # Your OpenRouter API key
+    timeout: 180
+    enabled: false
+    priority: 2
+    headers:
+      HTTP-Referer: "https://your-app.com"
+      X-Title: "My App"
+    extra_params:
+      # OpenRouter-specific parameters
+      transforms: ["middle-out"]
+
+# Legacy single endpoint fields (for backward compatibility)
+# These are used if no endpoints are configured above
+local_api_url: ""
+local_api_key: ""
+
 # Models this client provides. Each model has its own concurrency, context length and capabilities.
 models:
-  - name: "local-7b-chat"
+  - name: "local-7b-chat"              # External name exposed to AndyAPI
+    upstream_id: "llama3.2:latest"     # Internal model ID used when calling the endpoint
+    endpoint_id: "local-ollama"        # Which endpoint to use for this model
     max_completion_tokens: 4096
     concurrent_connections: 4
     supports_embedding: false
     supports_vision: false
     fallback: false
+    enabled: true
+    timeout: 0                         # Per-model timeout override (0 = use endpoint default)
+    headers: {}                        # Extra headers for this specific model
+    extra_params: {}                   # Extra parameters for this specific model
+
   - name: "vision-multimodal-13b"
+    upstream_id: "llava:13b"
+    endpoint_id: "local-ollama"
     max_completion_tokens: 8192
     concurrent_connections: 2
     supports_embedding: true
     supports_vision: true
     fallback: true
+    enabled: false
+    
+  - name: "gpt-4-turbo"
+    upstream_id: "openai/gpt-4-turbo"
+    endpoint_id: "openrouter"
+    max_completion_tokens: 128000
+    concurrent_connections: 10
+    supports_embedding: false
+    supports_vision: true
+    fallback: false
+    enabled: false
+    extra_params:
+      temperature: 0.7

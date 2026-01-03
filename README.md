@@ -4,7 +4,11 @@ Bridge your local LLMs (OpenAI-compatible) to the AndyAPI server over WebSocket,
 
 - Lightweight Go binary (no external DB)
 - WebSocket heartbeat + exponential reconnect
-- Configurable provider name and per-model capabilities
+- Multiple API endpoints with custom headers/parameters
+- Model ID mapping (different internal/external names)
+- Statistics tracking for requests, latency, and tokens
+- Hot reload - config changes apply without restart
+- Configurable timeouts per endpoint or model
 - Local model discovery via `/v1/models` (Ollama, vLLM, OpenAI-compatible APIs)
 - Forwards chat completions to your local API (`/v1/chat/completions`)
 - Built-in UI at `http://localhost:8090/ui` by default
@@ -33,24 +37,24 @@ go build -o andyapi-client
 2) Open the UI
 
 - Visit http://localhost:8090/ui
-- If no `config.yaml` exists, the client starts in “initial setup” mode.
+- If no `config.yaml` exists, the client starts in "initial setup" mode.
 
 3) Fill in settings
 
 - Andy API Base URL (**correct:** `https://andy.mindcraft-ce.com/api`; example: `http://localhost:8080` or `https://api.example.com`)  → the client derives `ws(s)://…/ws`
 - Optional Provider name (default: `provider`)
-- Local OpenAI API URL (for model scan and completions), e.g. `http://localhost:11434`
-- Optional Local OpenAI API Key (if your local endpoint requires it)
+- Configure one or more API endpoints (Ollama, OpenRouter, vLLM, etc.)
 
 4) Discover and enable models
 
-- Click “Scan from Local API” to populate models from `GET {local_api_url}/v1/models`
-- Toggle “Enabled” for models you want to serve
+- Click "Scan from Local API" to populate models from `GET {endpoint_url}/v1/models`
+- Toggle "Enabled" for models you want to serve
+- Optionally set different internal/external model IDs
 - Save
 
 5) Connect to AndyAPI
 
-- Click “Connect to AndyAPI” in the header.
+- Click "Connect to AndyAPI" in the header.
 - Status badge shows: never connected → connected/disconnected
 
 ---
@@ -62,13 +66,19 @@ AndyAPI  ⇄  WebSocket (/ws)
    ⇅           ↑ heartbeat/ping
 Client
    ⇅ request/response
-Local OpenAI-compatible API (e.g. Ollama, vLLM)
+Multiple OpenAI-compatible APIs
+├─ Ollama (local)
+├─ vLLM (local)
+├─ OpenRouter (remote)
+└─ Any OpenAI-compatible endpoint
         ↳ /v1/chat/completions
 ```
 
 - On connect, the client registers the models you enabled.
-- Incoming requests from AndyAPI are forwarded to your local API’s `/v1/chat/completions` with the requested `model` and `max_tokens` (when provided).
+- Incoming requests from AndyAPI are forwarded to the appropriate endpoint's `/v1/chat/completions` with the configured model ID.
+- Model ID mapping allows exposing a friendly name while using the actual model ID internally.
 - Responses are streamed back (non-streaming payload today; first choice content is returned).
+- Statistics are tracked per model: requests, latency, token usage.
 
 ---
 
@@ -77,26 +87,66 @@ Local OpenAI-compatible API (e.g. Ollama, vLLM)
 Location: `client/config.yaml` (auto-created/saved from the UI). Example fields:
 
 ```yaml
-andy_api_url: "https://andy.mindcraft-ce.com/api"  # Correct AndyAPI base URL; ws(s) URL is derived as ws(s)://host/ws
-andy_api_key: ""                        # Reserved for future auth
-provider: "local-llm"                   # Your provider label
-heartbeat_interval: 30                   # Seconds
-reconnect_max_backoff: 30                # Seconds
-local_api_url: "http://localhost:11434" # OpenAI-compatible base (without /v1)
-local_api_key: ""                       # Optional bearer for local API
+andy_api_url: "https://andy.mindcraft-ce.com/api"
+client_token: ""
+provider: "local-llm"
+heartbeat_interval: 30
+reconnect_max_backoff: 30
+default_timeout: 120          # Global default timeout in seconds
+hot_reload: true              # Reload config when file changes
+
+# Multiple API endpoints
+endpoints:
+  - id: "local-ollama"
+    name: "Local Ollama"
+    base_url: "http://localhost:11434"
+    api_key: ""
+    timeout: 120              # Per-endpoint timeout
+    enabled: true
+    priority: 1               # Lower = higher priority for fallback
+    headers: {}               # Extra HTTP headers
+    extra_params: {}          # Extra request parameters
+    
+  - id: "openrouter"
+    name: "OpenRouter"
+    base_url: "https://openrouter.ai/api"
+    api_key: "sk-or-..."
+    timeout: 180
+    enabled: false
+    priority: 2
+    headers:
+      HTTP-Referer: "https://your-app.com"
+      X-Title: "My App"
+    extra_params:
+      transforms: ["middle-out"]
+
+# Legacy single endpoint (for backward compatibility)
+local_api_url: ""
+local_api_key: ""
+
+# Models with ID mapping and per-model settings
 models:
-  - name: "local-7b-chat"
+  - name: "gpt-4-local"           # External name (exposed to AndyAPI)
+    upstream_id: "llama3.2:latest" # Internal model ID (used with endpoint)
+    endpoint_id: "local-ollama"    # Which endpoint to use
     max_completion_tokens: 4096
-    concurrent_connections: 2
+    concurrent_connections: 4
     supports_embedding: false
     supports_vision: false
+    fallback: false
     enabled: true
+    timeout: 0                     # Per-model timeout (0 = use endpoint default)
+    headers: {}                    # Extra headers for this model
+    extra_params:                  # Extra params for this model
+      temperature: 0.7
 ```
 
 Notes
 - **The correct AndyAPI base URL is:** `https://andy.mindcraft-ce.com/api`
 - `andy_api_url` can be `http(s)://…` or `ws(s)://…`; if `http(s)://`, the client derives `ws(s)://…/ws` automatically.
-- Model discovery uses `GET {local_api_url}/v1/models` and heuristically marks embedding/vision when names include keywords like “embed”, “vision”, or “vl”.
+- Model discovery uses `GET {endpoint_url}/v1/models` and heuristically marks embedding/vision when names include keywords like "embed", "vision", or "vl".
+- **Model ID Mapping**: Use `upstream_id` to specify the actual model name used when calling the API. The external `name` is what AndyAPI sees.
+- **Timeout hierarchy**: Model timeout > Endpoint timeout > Global default > 120s fallback
 
 ---
 
@@ -117,9 +167,23 @@ Connection control
 
 Config endpoints
 - `POST /api/save-config` – Only during initial setup; saves full config
-- `POST /api/update-config` – Update config after setup (URL, provider, local API, models, etc.)
+- `POST /api/update-config` – Update config after setup (URL, provider, endpoints, models, etc.)
+- `POST /api/reload-config` – Manually reload config from disk
 - `POST /models` – Replace models (array) and broadcast update to server
-- `POST /api/scan-models` – Body: `{ base_url, api_key }`; responds `{ models: [...] }`
+
+Endpoint management
+- `GET /api/endpoints` – List all configured endpoints
+- `POST /api/endpoints` – Replace all endpoints
+- `POST /api/endpoints/add` – Add a new endpoint
+- `DELETE /api/endpoints/:id` – Delete an endpoint by ID
+
+Model scanning
+- `POST /api/scan-models` – Body: `{ base_url, api_key, endpoint_id }`; responds `{ models: [...] }`
+
+Statistics
+- `GET /api/stats` – All model statistics
+- `GET /api/stats/:model` – Statistics for a specific model
+- `POST /api/stats/reset` – Reset statistics (optional body: `{ model: "name" }` to reset single model)
 
 Default listen address: `:8090` (change with `-http` flag).
 
@@ -179,15 +243,20 @@ Artifacts include a binary, `SHA256SUMS`, and a `.tar.gz` bundle.
   - See `/api/status` and logs for errors; adjust `heartbeat_interval`/`reconnect_max_backoff`.
 
 - Model scan fails
-  - Ensure `local_api_url` is correct and reachable; it must expose `/v1/models`.
-  - If your local endpoint requires a key, set `local_api_key`.
+  - Ensure the endpoint `base_url` is correct and reachable; it must expose `/v1/models`.
+  - If your endpoint requires a key, set `api_key` on the endpoint.
 
 - Completions fail
-  - Ensure the `model` name exists in your local endpoint and supports chat completions.
-  - The client uses the first choice’s message content from `/v1/chat/completions` responses.
+  - Ensure the `upstream_id` (or `name` if not mapped) exists in your endpoint and supports chat completions.
+  - Check the Statistics tab for error details.
+  - The client uses the first choice's message content from `/v1/chat/completions` responses.
 
 - Port in use
   - Change the management address via `-http :<port>`.
+
+- Config not reloading
+  - Ensure `hot_reload: true` in your config
+  - Check logs for reload errors
 
 ---
 

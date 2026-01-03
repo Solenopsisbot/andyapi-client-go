@@ -192,15 +192,9 @@
       border-radius: 6px;
     }
 
-    /* Action buttons in table */
-    .action-btns {
-      display: flex;
-      gap: 6px;
-    }
-
     /* Main Content */
     main {
-      max-width: 1000px;
+      max-width: 1100px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -210,6 +204,7 @@
       display: flex;
       gap: 4px;
       margin-bottom: -1px;
+      flex-wrap: wrap;
     }
 
     .tab {
@@ -278,7 +273,7 @@
       color: var(--text-dim);
     }
 
-    input, select {
+    input, select, textarea {
       padding: 12px 14px;
       font-size: 14px;
       background: var(--bg);
@@ -288,7 +283,14 @@
       transition: all 0.15s ease;
     }
 
-    input:focus, select:focus {
+    textarea {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 12px;
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    input:focus, select:focus, textarea:focus {
       outline: none;
       border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(79, 143, 247, 0.15);
@@ -414,7 +416,9 @@
       border-radius: 12px;
       padding: 24px;
       width: 100%;
-      max-width: 500px;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
       margin: 20px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
       transform: scale(0.95) translateY(-10px);
@@ -542,6 +546,86 @@
       margin-bottom: 12px;
     }
 
+    /* Stats cards */
+    .stats-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-card .value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .stat-card .sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* Endpoint cards */
+    .endpoint-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .endpoint-card .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .endpoint-card .name {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .endpoint-card .url {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .endpoint-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .endpoint-status.enabled {
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--accent);
+    }
+
+    .endpoint-status.disabled {
+      background: rgba(107, 114, 128, 0.15);
+      color: var(--muted);
+    }
+
     /* Scrollbar */
     ::-webkit-scrollbar {
       width: 8px;
@@ -559,6 +643,43 @@
 
     ::-webkit-scrollbar-thumb:hover {
       background: var(--border-focus);
+    }
+
+    /* Collapsible sections */
+    .collapsible {
+      margin-top: 16px;
+    }
+
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 8px 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .collapsible-header:hover {
+      color: var(--text);
+    }
+
+    .collapsible-content {
+      display: none;
+      padding-top: 12px;
+    }
+
+    .collapsible.open .collapsible-content {
+      display: block;
+    }
+
+    .collapsible-header .arrow {
+      transition: transform 0.2s ease;
+    }
+
+    .collapsible.open .collapsible-header .arrow {
+      transform: rotate(90deg);
     }
   </style>
 </head>
@@ -584,7 +705,9 @@
   <main>
     <div class="tabs">
       <div class="tab active" data-tab="connection">Connection</div>
+      <div class="tab" data-tab="endpoints">Endpoints</div>
       <div class="tab" data-tab="models">Models</div>
+      <div class="tab" data-tab="stats">Statistics</div>
       <div class="tab" data-tab="about">About</div>
     </div>
 
@@ -607,14 +730,9 @@
           <div class="hint">Identifier for your provider (default: local-llm)</div>
         </div>
         <div class="form-group">
-          <label>Local OpenAI API URL</label>
-          <input id="local_api_url" placeholder="http://localhost:11434">
-          <div class="hint">Your local LLM endpoint (without /v1)</div>
-        </div>
-        <div class="form-group">
-          <label>Local API Key</label>
-          <input id="local_api_key" type="password" placeholder="sk-...">
-          <div class="hint">Optional, if your local API requires authentication</div>
+          <label>Default Timeout (seconds)</label>
+          <input id="default_timeout" type="number" min="10" value="120">
+          <div class="hint">Global default for API requests</div>
         </div>
         <div class="form-group">
           <label>Heartbeat Interval (seconds)</label>
@@ -624,26 +742,73 @@
           <label>Reconnect Max Backoff (seconds)</label>
           <input id="reconnect" type="number" min="5" value="30">
         </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input id="hot_reload" type="checkbox" checked> Enable Hot Reload
+          </label>
+          <div class="hint">Automatically reload config when file changes</div>
+        </div>
       </div>
+      
+      <div class="collapsible">
+        <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="arrow">▶</span> Legacy Single Endpoint (backward compatibility)
+        </div>
+        <div class="collapsible-content">
+          <div class="grid">
+            <div class="form-group">
+              <label>Local OpenAI API URL</label>
+              <input id="local_api_url" placeholder="http://localhost:11434">
+              <div class="hint">Used if no endpoints are configured</div>
+            </div>
+            <div class="form-group">
+              <label>Local API Key</label>
+              <input id="local_api_key" type="password" placeholder="sk-...">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-endpoints" class="panel" style="display:none">
+      <div class="row between">
+        <h3 style="margin:0">API Endpoints</h3>
+        <button id="btnAddEndpoint" class="btn primary">+ Add Endpoint</button>
+      </div>
+      <p class="hint" style="margin-top:8px;margin-bottom:16px">Configure multiple OpenAI-compatible API endpoints. Models can be assigned to specific endpoints.</p>
+
+      <div id="endpointsEmpty" class="empty-state">
+        <p>No endpoints configured yet.</p>
+        <p class="hint">Click "Add Endpoint" to configure your first API endpoint.</p>
+      </div>
+
+      <div id="endpointsList"></div>
     </section>
 
     <section id="tab-models" class="panel" style="display:none">
       <div class="row between">
         <h3 style="margin:0">Available Models</h3>
-        <button id="btnScanModels" class="btn">Scan from Local API</button>
+        <div class="row">
+          <select id="scanEndpoint" style="padding:8px 12px;font-size:13px;">
+            <option value="">Select endpoint to scan...</option>
+          </select>
+          <button id="btnScanModels" class="btn">Scan Models</button>
+          <button id="btnAddModel" class="btn">+ Add Model</button>
+        </div>
       </div>
 
       <div id="modelsEmpty" class="empty-state">
         <p>No models configured yet.</p>
-        <p class="hint">Click "Scan from Local API" to auto-discover models from your local endpoint.</p>
+        <p class="hint">Click "Scan Models" to auto-discover models from an endpoint, or add them manually.</p>
       </div>
 
       <table id="modelsTable" style="display:none">
         <thead>
           <tr>
             <th>Model Name</th>
+            <th>Upstream ID</th>
+            <th>Endpoint</th>
             <th>Context</th>
-            <th>Concurrency</th>
             <th>Embed</th>
             <th>Vision</th>
             <th>Enabled</th>
@@ -652,65 +817,216 @@
         </thead>
         <tbody id="modelsBody"></tbody>
       </table>
-
     </section>
 
-    <!-- Model Editor Modal -->
-    <div id="modelModal" class="modal-overlay">
+    <section id="tab-stats" class="panel" style="display:none">
+      <div class="row between">
+        <h3 style="margin:0">Statistics</h3>
+        <div class="row">
+          <button id="btnRefreshStats" class="btn">Refresh</button>
+          <button id="btnResetStats" class="btn danger">Reset All</button>
+        </div>
+      </div>
+
+      <div id="statsEmpty" class="empty-state">
+        <p>No statistics available yet.</p>
+        <p class="hint">Statistics will appear after processing requests.</p>
+      </div>
+
+      <div id="statsSummary" class="stats-grid" style="display:none"></div>
+      
+      <table id="statsTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Requests</th>
+            <th>Success</th>
+            <th>Failed</th>
+            <th>Avg Latency</th>
+            <th>Tokens/sec</th>
+            <th>Last Request</th>
+          </tr>
+        </thead>
+        <tbody id="statsBody"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-about" class="panel" style="display:none">
+      <h3>About AndyAPI Client</h3>
+      <div class="about-content">
+        <p>This client connects your local AI models to the AndyAPI server via WebSocket, allowing them to be accessed through a unified API endpoint.</p>
+        <p><strong>New Features:</strong></p>
+        <ul style="margin-left: 20px; margin-bottom: 12px;">
+          <li><strong>Multiple Endpoints:</strong> Configure multiple OpenAI-compatible API endpoints (Ollama, OpenRouter, vLLM, etc.)</li>
+          <li><strong>Model ID Mapping:</strong> Use different internal/external model IDs</li>
+          <li><strong>Custom Headers & Params:</strong> Add extra headers and parameters per endpoint or model</li>
+          <li><strong>Statistics Tracking:</strong> Monitor requests, latency, and token usage</li>
+          <li><strong>Hot Reload:</strong> Config changes are automatically applied without restart</li>
+          <li><strong>Configurable Timeouts:</strong> Set timeouts globally, per endpoint, or per model</li>
+        </ul>
+        <p class="hint" style="margin-top:20px">Version 2.0.0 • Built with ❤️</p>
+      </div>
+    </section>
+
+    <!-- Endpoint Editor Modal -->
+    <div id="endpointModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="editorTitle">Edit Model</h3>
-          <button class="modal-close" id="btnCloseModal">
+          <h3 id="endpointEditorTitle">Add Endpoint</h3>
+          <button class="modal-close" onclick="closeEndpointModal()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
           </button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <label>Model Name</label>
-            <input id="m_name" placeholder="model-id">
+          <div class="grid">
+            <div class="form-group">
+              <label>Endpoint ID</label>
+              <input id="ep_id" placeholder="my-endpoint">
+              <div class="hint">Unique identifier (auto-generated if empty)</div>
+            </div>
+            <div class="form-group">
+              <label>Display Name</label>
+              <input id="ep_name" placeholder="My Local API">
+            </div>
           </div>
           <div class="form-group">
-            <label>Max Completion Tokens</label>
-            <input id="m_ctx" type="number" min="1" value="4096">
+            <label>Base URL</label>
+            <input id="ep_url" placeholder="http://localhost:11434">
+            <div class="hint">Without /v1 suffix</div>
+          </div>
+          <div class="grid">
+            <div class="form-group">
+              <label>API Key</label>
+              <input id="ep_key" type="password" placeholder="sk-...">
+            </div>
+            <div class="form-group">
+              <label>Timeout (seconds)</label>
+              <input id="ep_timeout" type="number" min="0" value="0">
+              <div class="hint">0 = use global default</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="form-group">
+              <label>Priority</label>
+              <input id="ep_priority" type="number" min="0" value="1">
+              <div class="hint">Lower = higher priority for fallback</div>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px">
+                <input id="ep_enabled" type="checkbox" checked> Enabled
+              </label>
+            </div>
           </div>
           <div class="form-group">
-            <label>Concurrent Connections</label>
-            <input id="m_cc" type="number" min="1" value="1">
+            <label>Extra Headers (JSON)</label>
+            <textarea id="ep_headers" placeholder='{"X-Custom-Header": "value"}'>{}</textarea>
           </div>
           <div class="form-group">
-            <label style="display:flex;align-items:center;gap:8px">
-              <input id="m_embed" type="checkbox"> Supports Embedding
-            </label>
-          </div>
-          <div class="form-group">
-            <label style="display:flex;align-items:center;gap:8px">
-              <input id="m_vision" type="checkbox"> Supports Vision
-            </label>
+            <label>Extra Parameters (JSON)</label>
+            <textarea id="ep_params" placeholder='{"temperature": 0.7}'>{}</textarea>
+            <div class="hint">Added to all requests made to this endpoint</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button id="btnCancelModel" class="btn">Cancel</button>
-          <button id="btnSaveModel" class="btn primary">Save Model</button>
+          <button class="btn" onclick="closeEndpointModal()">Cancel</button>
+          <button id="btnSaveEndpoint" class="btn primary">Save Endpoint</button>
         </div>
       </div>
     </div>
 
-    <section id="tab-about" class="panel" style="display:none">
-      <h3>About AndyAPI Client</h3>
-      <div class="about-content">
-        <p>This client connects your local AI models to the AndyAPI server via WebSocket, allowing them to be accessed through a unified API endpoint.</p>
-        <p>Configure your local OpenAI-compatible API (such as Ollama, LM Studio, or vLLM), scan for available models, and connect to start serving requests.</p>
-        <p class="hint" style="margin-top:20px">Version 1.0.0 • Built with ❤️</p>
+    <!-- Model Editor Modal -->
+    <div id="modelModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modelEditorTitle">Edit Model</h3>
+          <button class="modal-close" onclick="closeModelModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="grid">
+            <div class="form-group">
+              <label>Model Name (External)</label>
+              <input id="m_name" placeholder="my-model">
+              <div class="hint">Name exposed to AndyAPI</div>
+            </div>
+            <div class="form-group">
+              <label>Upstream ID (Internal)</label>
+              <input id="m_upstream" placeholder="llama3.2:latest">
+              <div class="hint">Actual model ID used with the endpoint</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Endpoint</label>
+            <select id="m_endpoint" style="width:100%">
+              <option value="">Default endpoint</option>
+            </select>
+          </div>
+          <div class="grid">
+            <div class="form-group">
+              <label>Max Completion Tokens</label>
+              <input id="m_ctx" type="number" min="1" value="4096">
+            </div>
+            <div class="form-group">
+              <label>Concurrent Connections</label>
+              <input id="m_cc" type="number" min="1" value="1">
+            </div>
+            <div class="form-group">
+              <label>Timeout (seconds)</label>
+              <input id="m_timeout" type="number" min="0" value="0">
+              <div class="hint">0 = use endpoint default</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px">
+                <input id="m_embed" type="checkbox"> Supports Embedding
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px">
+                <input id="m_vision" type="checkbox"> Supports Vision
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px">
+                <input id="m_fallback" type="checkbox"> Is Fallback
+              </label>
+            </div>
+          </div>
+          <div class="collapsible">
+            <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+              <span class="arrow">▶</span> Advanced Options
+            </div>
+            <div class="collapsible-content">
+              <div class="form-group">
+                <label>Extra Headers (JSON)</label>
+                <textarea id="m_headers" placeholder='{"X-Custom-Header": "value"}'>{}</textarea>
+              </div>
+              <div class="form-group">
+                <label>Extra Parameters (JSON)</label>
+                <textarea id="m_params" placeholder='{"temperature": 0.7}'>{}</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModelModal()">Cancel</button>
+          <button id="btnSaveModel" class="btn primary">Save Model</button>
+        </div>
       </div>
-    </section>
+    </div>
   </main>
 
   <div id="toast" class="toast"></div>
 
   <script>
     const $ = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
     const show = el => el.style.display = '';
     const hide = el => el.style.display = 'none';
     const toast = (m) => { 
@@ -721,26 +1037,19 @@
     };
 
     // Tabs
-    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    $$('.tab').forEach(t => t.addEventListener('click', () => {
+      $$('.tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
-      ['connection', 'models', 'about'].forEach(name => hide($('#tab-' + name)));
+      ['connection', 'endpoints', 'models', 'stats', 'about'].forEach(name => hide($('#tab-' + name)));
       show($('#tab-' + t.dataset.tab));
+      if (t.dataset.tab === 'stats') refreshStats();
     }));
 
     // State
     let cfg = null;
     let initial = false;
-    let editIndex = -1;
-
-    function wsFrom(base) {
-      if (!base) return '';
-      base = base.trim().replace(/\/$/, '');
-      if (base.startsWith('ws')) return base.endsWith('/ws') ? base : base + '/ws';
-      if (base.startsWith('http://')) return 'ws://' + base.slice(7) + '/ws';
-      if (base.startsWith('https://')) return 'wss://' + base.slice(8) + '/ws';
-      return 'ws://' + base + '/ws';
-    }
+    let editModelIndex = -1;
+    let editEndpointIndex = -1;
 
     async function loadState() {
       try {
@@ -755,6 +1064,8 @@
     async function loadCfg() {
       const r = await fetch('/config');
       cfg = await r.json();
+      cfg.endpoints = cfg.endpoints || [];
+      cfg.models = cfg.models || [];
       renderAll();
     }
 
@@ -765,14 +1076,63 @@
       $('#provider').value = cfg.provider || '';
       $('#heartbeat').value = cfg.heartbeat_interval || 30;
       $('#reconnect').value = cfg.reconnect_max_backoff || 30;
+      $('#default_timeout').value = cfg.default_timeout || 120;
+      $('#hot_reload').checked = cfg.hot_reload !== false;
+      $('#local_api_url').value = cfg.local_api_url || '';
+      $('#local_api_key').value = cfg.local_api_key || '';
 
-      // Local API fields
-      const elUrl = document.getElementById('local_api_url');
-      const elKey = document.getElementById('local_api_key');
-      if (elUrl) elUrl.value = cfg.local_api_url || '';
-      if (elKey) elKey.value = cfg.local_api_key || '';
+      renderEndpoints();
+      renderModels();
+      updateEndpointSelects();
 
-      // Models
+      // Client ID
+      fetch('/health').then(r => r.json()).then(h => {
+        $('#clientId').textContent = 'id: ' + (h.client_id || '…');
+      });
+    }
+
+    function renderEndpoints() {
+      const endpoints = cfg.endpoints || [];
+      const empty = $('#endpointsEmpty');
+      const list = $('#endpointsList');
+      list.innerHTML = '';
+
+      if (endpoints.length === 0) {
+        show(empty);
+      } else {
+        hide(empty);
+      }
+
+      endpoints.forEach((ep, i) => {
+        const card = document.createElement('div');
+        card.className = 'endpoint-card';
+        card.innerHTML = `
+          <div class="header">
+            <div>
+              <div class="name">${ep.name || ep.id}</div>
+              <div class="url">${ep.base_url || '(no URL)'}</div>
+            </div>
+            <div class="row">
+              <span class="endpoint-status ${ep.enabled ? 'enabled' : 'disabled'}">${ep.enabled ? 'Enabled' : 'Disabled'}</span>
+              <button class="icon-btn" data-ep-edit="${i}" title="Edit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button class="icon-btn danger" data-ep-del="${i}" title="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function renderModels() {
       const models = cfg.models || [];
       const empty = $('#modelsEmpty');
       const table = $('#modelsTable');
@@ -790,22 +1150,24 @@
       models.forEach((m, i) => {
         const tr = document.createElement('tr');
         const enabled = m.enabled ? 'checked' : '';
+        const epName = getEndpointName(m.endpoint_id);
         tr.innerHTML = `
           <td>${m.name || ''}</td>
+          <td style="color:var(--muted);font-size:11px">${m.upstream_id || m.name || ''}</td>
+          <td style="font-size:11px">${epName}</td>
           <td>${m.max_completion_tokens || 0}</td>
-          <td>${m.concurrent_connections || 1}</td>
           <td><span class="feature-badge ${m.supports_embedding ? 'active' : 'inactive'}">${m.supports_embedding ? '✓' : '–'}</span></td>
           <td><span class="feature-badge ${m.supports_vision ? 'active' : 'inactive'}">${m.supports_vision ? '✓' : '–'}</span></td>
           <td><input type="checkbox" data-enable="${i}" ${enabled}></td>
           <td>
             <div class="action-cell">
-              <button class="icon-btn" data-i="${i}" title="Edit">
+              <button class="icon-btn" data-model-edit="${i}" title="Edit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
               </button>
-              <button class="icon-btn danger" data-del="${i}" title="Delete">
+              <button class="icon-btn danger" data-model-del="${i}" title="Delete">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
@@ -815,25 +1177,67 @@
         `;
         body.appendChild(tr);
       });
+    }
 
-      // Client ID
-      fetch('/health').then(r => r.json()).then(h => {
-        $('#clientId').textContent = 'id: ' + (h.client_id || '…');
+    function getEndpointName(id) {
+      if (!id) return '(default)';
+      const ep = (cfg.endpoints || []).find(e => e.id === id);
+      return ep ? (ep.name || ep.id) : id;
+    }
+
+    function updateEndpointSelects() {
+      const endpoints = cfg.endpoints || [];
+      
+      // Scan endpoint select
+      const scanSelect = $('#scanEndpoint');
+      scanSelect.innerHTML = '<option value="">Select endpoint to scan...</option>';
+      endpoints.forEach(ep => {
+        if (ep.enabled) {
+          const opt = document.createElement('option');
+          opt.value = ep.id;
+          opt.textContent = ep.name || ep.id;
+          scanSelect.appendChild(opt);
+        }
+      });
+      
+      // Model endpoint select
+      const modelSelect = $('#m_endpoint');
+      modelSelect.innerHTML = '<option value="">Default endpoint</option>';
+      endpoints.forEach(ep => {
+        const opt = document.createElement('option');
+        opt.value = ep.id;
+        opt.textContent = ep.name || ep.id;
+        modelSelect.appendChild(opt);
       });
     }
 
-    // Table actions
+    // Event delegation for table/card actions
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-i]');
-      if (btn) {
-        editIndex = parseInt(btn.getAttribute('data-i'));
-        openEditor(cfg.models[editIndex]);
+      // Model actions
+      const editModelBtn = e.target.closest('[data-model-edit]');
+      if (editModelBtn) {
+        editModelIndex = parseInt(editModelBtn.getAttribute('data-model-edit'));
+        openModelEditor(cfg.models[editModelIndex]);
       }
-      const delBtn = e.target.closest('[data-del]');
-      if (delBtn) {
-        const idx = parseInt(delBtn.getAttribute('data-del'));
+      const delModelBtn = e.target.closest('[data-model-del]');
+      if (delModelBtn) {
+        const idx = parseInt(delModelBtn.getAttribute('data-model-del'));
         cfg.models.splice(idx, 1);
-        renderAll();
+        renderModels();
+      }
+      
+      // Endpoint actions
+      const editEpBtn = e.target.closest('[data-ep-edit]');
+      if (editEpBtn) {
+        editEndpointIndex = parseInt(editEpBtn.getAttribute('data-ep-edit'));
+        openEndpointEditor(cfg.endpoints[editEndpointIndex]);
+      }
+      const delEpBtn = e.target.closest('[data-ep-del]');
+      if (delEpBtn) {
+        const idx = parseInt(delEpBtn.getAttribute('data-ep-del'));
+        cfg.endpoints.splice(idx, 1);
+        renderEndpoints();
+        updateEndpointSelects();
       }
     });
 
@@ -845,49 +1249,124 @@
       }
     });
 
-    function openEditor(m) {
-      $('#editorTitle').textContent = (editIndex === -1 ? 'New' : 'Edit') + ' Model';
+    // Endpoint Modal
+    function openEndpointEditor(ep) {
+      $('#endpointEditorTitle').textContent = (editEndpointIndex === -1 ? 'Add' : 'Edit') + ' Endpoint';
+      $('#ep_id').value = ep?.id || '';
+      $('#ep_name').value = ep?.name || '';
+      $('#ep_url').value = ep?.base_url || '';
+      $('#ep_key').value = ep?.api_key || '';
+      $('#ep_timeout').value = ep?.timeout || 0;
+      $('#ep_priority').value = ep?.priority || 1;
+      $('#ep_enabled').checked = ep?.enabled !== false;
+      $('#ep_headers').value = JSON.stringify(ep?.headers || {}, null, 2);
+      $('#ep_params').value = JSON.stringify(ep?.extra_params || {}, null, 2);
+      $('#endpointModal').classList.add('active');
+    }
+
+    function closeEndpointModal() {
+      $('#endpointModal').classList.remove('active');
+      editEndpointIndex = -1;
+    }
+
+    $('#btnAddEndpoint').onclick = () => {
+      editEndpointIndex = -1;
+      openEndpointEditor(null);
+    };
+
+    $('#btnSaveEndpoint').onclick = () => {
+      let headers = {}, params = {};
+      try { headers = JSON.parse($('#ep_headers').value || '{}'); } catch (e) { toast('Invalid headers JSON'); return; }
+      try { params = JSON.parse($('#ep_params').value || '{}'); } catch (e) { toast('Invalid params JSON'); return; }
+      
+      const ep = {
+        id: $('#ep_id').value.trim() || `endpoint-${Date.now()}`,
+        name: $('#ep_name').value.trim(),
+        base_url: $('#ep_url').value.trim(),
+        api_key: $('#ep_key').value.trim(),
+        timeout: parseInt($('#ep_timeout').value) || 0,
+        priority: parseInt($('#ep_priority').value) || 1,
+        enabled: $('#ep_enabled').checked,
+        headers: headers,
+        extra_params: params
+      };
+      
+      if (!ep.base_url) {
+        toast('Base URL required');
+        return;
+      }
+      
+      if (editEndpointIndex === -1) {
+        cfg.endpoints.push(ep);
+      } else {
+        cfg.endpoints[editEndpointIndex] = ep;
+      }
+      
+      closeEndpointModal();
+      renderEndpoints();
+      updateEndpointSelects();
+    };
+
+    // Model Modal
+    function openModelEditor(m) {
+      $('#modelEditorTitle').textContent = (editModelIndex === -1 ? 'Add' : 'Edit') + ' Model';
       $('#m_name').value = m?.name || '';
+      $('#m_upstream').value = m?.upstream_id || '';
+      $('#m_endpoint').value = m?.endpoint_id || '';
       $('#m_ctx').value = m?.max_completion_tokens || 4096;
       $('#m_cc').value = m?.concurrent_connections || 1;
+      $('#m_timeout').value = m?.timeout || 0;
       $('#m_embed').checked = !!m?.supports_embedding;
       $('#m_vision').checked = !!m?.supports_vision;
+      $('#m_fallback').checked = !!m?.fallback;
+      $('#m_headers').value = JSON.stringify(m?.headers || {}, null, 2);
+      $('#m_params').value = JSON.stringify(m?.extra_params || {}, null, 2);
       $('#modelModal').classList.add('active');
     }
 
-    function closeModal() {
+    function closeModelModal() {
       $('#modelModal').classList.remove('active');
+      editModelIndex = -1;
     }
 
-    $('#btnCancelModel').onclick = closeModal;
-    $('#btnCloseModal').onclick = closeModal;
-
-    // Close modal on overlay click
-    $('#modelModal').onclick = (e) => {
-      if (e.target === $('#modelModal')) closeModal();
+    $('#btnAddModel').onclick = () => {
+      editModelIndex = -1;
+      openModelEditor(null);
     };
 
     $('#btnSaveModel').onclick = () => {
+      let headers = {}, params = {};
+      try { headers = JSON.parse($('#m_headers').value || '{}'); } catch (e) { toast('Invalid headers JSON'); return; }
+      try { params = JSON.parse($('#m_params').value || '{}'); } catch (e) { toast('Invalid params JSON'); return; }
+      
       const m = {
         name: $('#m_name').value.trim(),
-        max_completion_tokens: parseInt($('#m_ctx').value || '0'),
-        concurrent_connections: parseInt($('#m_cc').value || '1'),
+        upstream_id: $('#m_upstream').value.trim(),
+        endpoint_id: $('#m_endpoint').value,
+        max_completion_tokens: parseInt($('#m_ctx').value) || 4096,
+        concurrent_connections: parseInt($('#m_cc').value) || 1,
+        timeout: parseInt($('#m_timeout').value) || 0,
         supports_embedding: $('#m_embed').checked,
         supports_vision: $('#m_vision').checked,
-        enabled: (editIndex === -1 ? false : !!cfg.models[editIndex]?.enabled),
+        fallback: $('#m_fallback').checked,
+        enabled: editModelIndex === -1 ? false : !!cfg.models[editModelIndex]?.enabled,
+        headers: headers,
+        extra_params: params
       };
+      
       if (!m.name) {
         toast('Model name required');
         return;
       }
-      if (editIndex === -1) {
-        cfg.models = cfg.models || [];
+      
+      if (editModelIndex === -1) {
         cfg.models.push(m);
       } else {
-        cfg.models[editIndex] = m;
+        cfg.models[editModelIndex] = m;
       }
-      closeModal();
-      renderAll();
+      
+      closeModelModal();
+      renderModels();
     };
 
     // Save config
@@ -897,10 +1376,13 @@
           andy_api_url: $('#andy_api_url').value.trim(),
           client_token: $('#client_token').value.trim(),
           provider: $('#provider').value.trim() || 'provider',
-          heartbeat_interval: parseInt($('#heartbeat').value || '30'),
-          reconnect_max_backoff: parseInt($('#reconnect').value || '30'),
-          local_api_url: (document.getElementById('local_api_url')?.value || '').trim(),
-          local_api_key: (document.getElementById('local_api_key')?.value || '').trim(),
+          heartbeat_interval: parseInt($('#heartbeat').value) || 30,
+          reconnect_max_backoff: parseInt($('#reconnect').value) || 30,
+          default_timeout: parseInt($('#default_timeout').value) || 120,
+          hot_reload: $('#hot_reload').checked,
+          local_api_url: $('#local_api_url').value.trim(),
+          local_api_key: $('#local_api_key').value.trim(),
+          endpoints: cfg.endpoints || [],
           models: cfg.models || [],
         };
         const url = initial ? '/api/save-config' : '/api/update-config';
@@ -914,7 +1396,7 @@
         cfg = payload;
         toast('Configuration saved');
       } catch (e) {
-        toast('Save failed');
+        toast('Save failed: ' + e.message);
       }
     };
 
@@ -924,8 +1406,8 @@
         const r = await fetch('/api/status');
         if (!r.ok) return;
         const s = await r.json();
-        const badge = document.getElementById('statusBadge');
-        const idEl = document.getElementById('clientId');
+        const badge = $('#statusBadge');
+        const idEl = $('#clientId');
         const ever = !!s.ever_connected;
         const conn = !!s.connected;
         let cls = 'gray', text = 'never connected';
@@ -939,18 +1421,17 @@
         badge.className = 'badge ' + cls;
         badge.textContent = text;
         idEl.textContent = 'id: ' + (s.client_id || '…');
-        // Toggle buttons
-        document.getElementById('btnConnect').style.display = conn ? 'none' : '';
-        document.getElementById('btnDisconnect').style.display = conn ? '' : 'none';
+        $('#btnConnect').style.display = conn ? 'none' : '';
+        $('#btnDisconnect').style.display = conn ? '' : 'none';
       } catch (e) {}
     }
 
-    document.getElementById('btnConnect').onclick = async () => {
+    $('#btnConnect').onclick = async () => {
       await fetch('/api/connect', { method: 'POST' });
       setTimeout(refreshStatus, 200);
     };
 
-    document.getElementById('btnDisconnect').onclick = async () => {
+    $('#btnDisconnect').onclick = async () => {
       await fetch('/api/disconnect', { method: 'POST' });
       setTimeout(refreshStatus, 200);
     };
@@ -958,29 +1439,127 @@
     setInterval(refreshStatus, 1500);
 
     // Scan models
-    const scanBtn = document.getElementById('btnScanModels');
-    if (scanBtn) scanBtn.addEventListener('click', async () => {
-      const base = (document.getElementById('local_api_url')?.value || '').trim();
-      const key = (document.getElementById('local_api_key')?.value || '').trim();
+    $('#btnScanModels').onclick = async () => {
+      const endpointId = $('#scanEndpoint').value;
+      let base = '', key = '';
+      
+      if (endpointId) {
+        const ep = cfg.endpoints.find(e => e.id === endpointId);
+        if (ep) {
+          base = ep.base_url;
+          key = ep.api_key;
+        }
+      } else {
+        base = $('#local_api_url').value.trim();
+        key = $('#local_api_key').value.trim();
+      }
+      
       if (!base) {
-        toast('Local API URL required');
+        toast('Select an endpoint or configure legacy URL');
         return;
       }
+      
       try {
         const res = await fetch('/api/scan-models', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base_url: base, api_key: key })
+          body: JSON.stringify({ base_url: base, api_key: key, endpoint_id: endpointId })
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         cfg.models = data.models || [];
-        renderAll();
+        renderModels();
         toast('Found ' + cfg.models.length + ' models');
       } catch (e) {
-        toast('Scan failed');
+        toast('Scan failed: ' + e.message);
       }
-    });
+    };
+
+    // Statistics
+    async function refreshStats() {
+      try {
+        const r = await fetch('/api/stats');
+        if (!r.ok) return;
+        const data = await r.json();
+        const stats = data.stats || {};
+        const keys = Object.keys(stats);
+        
+        if (keys.length === 0) {
+          show($('#statsEmpty'));
+          hide($('#statsSummary'));
+          hide($('#statsTable'));
+          return;
+        }
+        
+        hide($('#statsEmpty'));
+        show($('#statsSummary'));
+        show($('#statsTable'));
+        
+        // Calculate totals
+        let totalReqs = 0, totalSuccess = 0, totalFailed = 0, totalLatency = 0;
+        keys.forEach(k => {
+          const s = stats[k];
+          totalReqs += s.total_requests || 0;
+          totalSuccess += s.successful_requests || 0;
+          totalFailed += s.failed_requests || 0;
+          totalLatency += s.total_latency_ms || 0;
+        });
+        
+        const avgLatency = totalSuccess > 0 ? (totalLatency / totalSuccess).toFixed(0) : 0;
+        
+        $('#statsSummary').innerHTML = `
+          <div class="stat-card">
+            <div class="label">Total Requests</div>
+            <div class="value">${totalReqs}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Successful</div>
+            <div class="value" style="color:var(--accent)">${totalSuccess}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Failed</div>
+            <div class="value" style="color:var(--danger)">${totalFailed}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Avg Latency</div>
+            <div class="value">${avgLatency}ms</div>
+          </div>
+        `;
+        
+        const tbody = $('#statsBody');
+        tbody.innerHTML = '';
+        keys.forEach(k => {
+          const s = stats[k];
+          const tr = document.createElement('tr');
+          const lastReq = s.last_request_time ? new Date(s.last_request_time).toLocaleString() : '–';
+          tr.innerHTML = `
+            <td>${k}</td>
+            <td>${s.total_requests || 0}</td>
+            <td style="color:var(--accent)">${s.successful_requests || 0}</td>
+            <td style="color:var(--danger)">${s.failed_requests || 0}</td>
+            <td>${(s.avg_latency_ms || 0).toFixed(0)}ms</td>
+            <td>${(s.avg_tokens_per_second || 0).toFixed(1)}</td>
+            <td style="font-size:11px">${lastReq}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('Failed to load stats:', e);
+      }
+    }
+
+    $('#btnRefreshStats').onclick = refreshStats;
+    
+    $('#btnResetStats').onclick = async () => {
+      if (!confirm('Reset all statistics?')) return;
+      try {
+        await fetch('/api/stats/reset', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+        refreshStats();
+        toast('Statistics reset');
+      } catch (e) {
+        toast('Failed to reset stats');
+      }
+    };
 
     // Init
     loadState().then(loadCfg).then(refreshStatus);
