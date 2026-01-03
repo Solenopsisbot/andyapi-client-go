@@ -99,7 +99,7 @@ hot_reload: true              # Reload config when file changes
 endpoints:
   - id: "local-ollama"
     name: "Local Ollama"
-    base_url: "http://localhost:11434"
+    base_url: "http://localhost:11434/v1"
     api_key: ""
     timeout: 120              # Per-endpoint timeout
     enabled: true
@@ -109,14 +109,14 @@ endpoints:
     
   - id: "openrouter"
     name: "OpenRouter"
-    base_url: "https://openrouter.ai/api"
+    base_url: "https://openrouter.ai/api/v1"
     api_key: "sk-or-..."
     timeout: 180
     enabled: false
     priority: 2
     headers:
-      HTTP-Referer: "https://your-app.com"
-      X-Title: "My App"
+      HTTP-Referer: "https://andy.mindcraft-ce.com"
+      X-Title: "AndyAPI"
     extra_params:
       transforms: ["middle-out"]
 

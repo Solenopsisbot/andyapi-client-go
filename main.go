@@ -730,7 +730,7 @@ func (pc *ProviderClient) callLocalCompletion(req LocalClientRequest) (string, i
 		return result, 0, 0, err
 	}
 
-	url := base + "/v1/chat/completions"
+	url := base + "/chat/completions"
 	// Build messages: prefer Messages array, fallback to Prompt
 	var messages []map[string]string
 	if len(req.Messages) > 0 {
@@ -822,7 +822,7 @@ func (pc *ProviderClient) callLocalEmbedding(endpoint *EndpointConfig, model *Mo
 	for strings.HasSuffix(base, "/") {
 		base = strings.TrimSuffix(base, "/")
 	}
-	url := base + "/v1/embeddings"
+	url := base + "/embeddings"
 	
 	// Build input from prompt or first message
 	input := req.Prompt
@@ -1159,7 +1159,7 @@ func (pc *ProviderClient) startHTTP(addr string) {
 		for strings.HasSuffix(base, "/") {
 			base = strings.TrimSuffix(base, "/")
 		}
-		url := base + "/v1/models"
+		url := base + "/models"
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
