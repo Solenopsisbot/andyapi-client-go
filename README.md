@@ -37,7 +37,7 @@ go build -o andyapi-client
 
 3) Fill in settings
 
-- Andy API Base URL (example: `http://localhost:8080` or `https://api.example.com`)  → the client derives `ws(s)://…/ws`
+- Andy API Base URL (**correct:** `https://andy.mindcraft-ce.com/api`; example: `http://localhost:8080` or `https://api.example.com`)  → the client derives `ws(s)://…/ws`
 - Optional Provider name (default: `provider`)
 - Local OpenAI API URL (for model scan and completions), e.g. `http://localhost:11434`
 - Optional Local OpenAI API Key (if your local endpoint requires it)
@@ -77,7 +77,7 @@ Local OpenAI-compatible API (e.g. Ollama, vLLM)
 Location: `client/config.yaml` (auto-created/saved from the UI). Example fields:
 
 ```yaml
-andy_api_url: "http://localhost:8080"  # Base; ws(s) URL is derived as ws(s)://host/ws
+andy_api_url: "https://andy.mindcraft-ce.com/api"  # Correct AndyAPI base URL; ws(s) URL is derived as ws(s)://host/ws
 andy_api_key: ""                        # Reserved for future auth
 provider: "local-llm"                   # Your provider label
 heartbeat_interval: 30                   # Seconds
@@ -94,6 +94,7 @@ models:
 ```
 
 Notes
+- **The correct AndyAPI base URL is:** `https://andy.mindcraft-ce.com/api`
 - `andy_api_url` can be `http(s)://…` or `ws(s)://…`; if `http(s)://`, the client derives `ws(s)://…/ws` automatically.
 - Model discovery uses `GET {local_api_url}/v1/models` and heuristically marks embedding/vision when names include keywords like “embed”, “vision”, or “vl”.
 

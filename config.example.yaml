@@ -1,5 +1,5 @@
 # Example configuration for andyapi provider client
-andy_api_url: "http://localhost:8080"
+andy_api_url: "https://andy.mindcraft-ce.com/api"  # Correct AndyAPI base URL
 # Client token for user authentication (obtain from AndyAPI admin panel -> Users)
 client_token: ""
 
