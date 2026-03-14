@@ -394,6 +394,7 @@ type ProviderClient struct {
 	writeMu       sync.Mutex
 	clientID      string
 	connected     bool
+	registered    bool // true after server sends welcome with client_id
 	everConnected bool
 	closing       chan struct{}
 	closed        bool
@@ -404,6 +405,7 @@ type ProviderClient struct {
 	connectCancel context.CancelFunc
 	stats         *StatsTracker
 	configWatcher *fsnotify.Watcher
+	lastSelfSave  time.Time // tracks our own config saves to avoid self-triggered reloads
 }
 
 func NewProviderClient(cfg *Config, configPath string, initial bool) *ProviderClient {
@@ -485,9 +487,15 @@ func (pc *ProviderClient) reloadConfig() error {
 		log.Printf("AndyAPI URL changed, reconnecting...")
 		pc.StopConnect()
 		pc.StartConnect()
-	} else if pc.connected {
-		// Just update the models on the server
-		pc.broadcastModelUpdate()
+	} else if pc.connected && pc.registered {
+		// Skip broadcasting if this reload was triggered by our own saveConfig
+		// (prevents update_models from racing with register on the server)
+		if time.Since(pc.lastSelfSave) < 2*time.Second {
+			log.Printf("Config reload: skipping broadcast (self-triggered save)")
+		} else {
+			log.Printf("Config changed externally, broadcasting model update")
+			pc.broadcastModelUpdate()
+		}
 	}
 	
 	return nil
@@ -504,13 +512,18 @@ func (pc *ProviderClient) broadcastModelUpdate() {
 // buildProvidedModels creates the ProvidedModel list from config
 func (pc *ProviderClient) buildProvidedModels() []ProvidedModel {
 	models := make([]ProvidedModel, 0, len(pc.cfg.Models))
+	// Use current clientID, falling back to saved LastClientID (matches pre-refactor behavior)
+	cid := pc.clientID
+	if cid == "" {
+		cid = strings.TrimSpace(pc.cfg.LastClientID)
+	}
 	for _, m := range pc.cfg.Models {
 		if !m.Enabled {
 			continue
 		}
 		stats := pc.stats.GetStats(m.Name)
 		models = append(models, ProvidedModel{
-			ClientID:              pc.clientID,
+			ClientID:              cid,
 			Provider:              pc.cfg.Provider,
 			Name:                  m.Name,
 			UpstreamID:            m.GetUpstreamID(),
@@ -579,6 +592,7 @@ func (pc *ProviderClient) connect(ctx context.Context) {
 		// After connection ends mark disconnected and retry on next loop
 		pc.mu.Lock()
 		pc.connected = false
+		pc.registered = false
 		pc.mu.Unlock()
 	}
 }
@@ -651,6 +665,7 @@ func (pc *ProviderClient) readLoop(ctx context.Context) {
 				if id, ok2 := d["client_id"].(string); ok2 {
 					pc.mu.Lock()
 					pc.clientID = id
+					pc.registered = true
 					pc.everConnected = true
 					pc.cfg.LastClientID = id
 					_ = pc.saveConfig("")
@@ -918,6 +933,7 @@ func (pc *ProviderClient) saveConfig(path string) error {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0755)
 	}
+	pc.lastSelfSave = time.Now()
 	return os.WriteFile(path, b, 0644)
 }
 
