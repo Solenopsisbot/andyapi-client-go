@@ -526,7 +526,7 @@ func (pc *ProviderClient) buildProvidedModels() []ProvidedModel {
 			ClientID:              cid,
 			Provider:              pc.cfg.Provider,
 			Name:                  m.Name,
-			UpstreamID:            m.GetUpstreamID(),
+			UpstreamID:            "", // Force server to send requests using the internal Name, not the UpstreamID
 			MaxCompletionTokens:   m.MaxCompletionTokens,
 			ConcurrentConnections: m.ConcurrentConnections,
 			AvgTokensPerSecond:    stats.AvgTokensPerSecond,
